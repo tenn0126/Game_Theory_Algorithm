@@ -1,0 +1,4 @@
+__pycache__/
+*.ipynb_checkpoints/
+data/        # データが大きい場合はGitに入れない
+.env

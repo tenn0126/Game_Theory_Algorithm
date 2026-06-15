@@ -1,0 +1,26 @@
+Game_Theory_Algorithm/
+│
+├── data/
+│   ├── raw/              # NGSIMの生データ (.csv)
+│   └── processed/        # 前処理済みデータ
+│
+├── src/                  # 再利用する関数・クラス
+│   ├── __init__.py
+│   ├── speed_models.py       # 速度密度モデル (Logistic, Underwood)
+│   ├── macroscopic.py        # マクロ状態の計算 (式9, 10)
+│   ├── cooperation.py        # 協調余剰・1-pipe速度の計算 (式4, 7)
+│   └── surplus_split.py      # 余剰分割係数の推定 (式12-14)
+│
+├── notebooks/            # JupyterLabで実行・可視化
+│   ├── 01_data_prep.ipynb        # データ前処理・フィルタリング
+│   ├── 02_speed_functions.ipynb  # 速度関数のフィッティング (Step1)
+│   ├── 03_macroscopic.ipynb      # マクロデータ計算 (Step2)
+│   ├── 04_cooperation.ipynb      # 協調余剰の計算 (Step3-5)
+│   └── 05_surplus_split.ipynb    # 余剰分割係数の推定 (Step6)
+│
+├── results/              # 図・結果の保存
+│   ├── figures/
+│   └── tables/
+│
+├── README.md
+└── requirements.txt

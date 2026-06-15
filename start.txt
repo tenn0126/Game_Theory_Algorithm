@@ -1,0 +1,4 @@
+conda activate GTA
+cd C:\Users\AMhetero\Documents\研究室\Game_Theory_Algorithm
+jupyter lab
+http://localhost:8888/lab
