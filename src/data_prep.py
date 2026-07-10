@@ -3,6 +3,37 @@ from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
 
+#軌跡データの読み込み
+def load_trajectory_data():
+    #csvファイルではなくtxtファイルを読み込む
+    path_1 = Path('../data/raw/trajectories-0400-0415.txt')
+    path_2 = Path('../data/raw/trajectories-0500-0515.txt')
+    path_3 = Path('../data/raw/trajectories-0515-0530.txt')
+
+    columns = [
+        'Vehicle_ID', 'Frame_ID', 'Total_Frames', 'Global_Time', 'Local_X', 'Local_Y',
+        'Global_X', 'Global_Y', 'v_Length', 'v_Width', 'v_Class', 'v_Vel', 'v_Acc',
+        'Lane_ID', 'Preceding', 'Following', 'Space_Headway', 'Time_Headway'
+    ]
+
+    df_1 = pd.read_csv(path_1, sep=r'\s+', header=None, names=columns)
+    df_2 = pd.read_csv(path_2, sep=r'\s+', header=None, names=columns)
+    df_3 = pd.read_csv(path_3, sep=r'\s+', header=None, names=columns)
+
+    # 時間帯の識別列を追加 (id の重複があるため)
+    df_1['time_period'] = 1  # 4:00-4:15
+    df_2['time_period'] = 2  # 5:00-5:15
+    df_3['time_period'] = 3  # 5:15-5:30
+
+    # 結合
+    df = pd.concat([df_1, df_2, df_3], ignore_index=True)
+
+    # データの確認
+    print(df.shape)
+    df.head()
+    return df
+
+
 #追従ペアIDを付与する関数
 def give_pair_id(df):
     """
