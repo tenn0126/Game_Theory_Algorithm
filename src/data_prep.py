@@ -33,40 +33,30 @@ def load_trajectory_data():
     df.head()
     return df
 
-
 #追従ペアIDを付与する関数
 def give_pair_id(df):
     """
     追従ペアIDを付与する関数
     """
-    # ソート
     df = df.sort_values(['time_period', 'Vehicle_ID', 'Global_Time']).copy()
-    
-    # 追従が途切れるタイミングを検出
-    # 自分が車線(Lane_ID)変更
-    lane_changed = df.groupby(['Vehicle_ID', 'time_period'])['Lane_ID'].transform(
-        lambda x: x != x.shift(fill_value=-1)
-    )
-    
-    #先行車両(Preceding)が変わった（ほかの車が車線変更）
-    preceding_changed = df.groupby(['Vehicle_ID', 'time_period'])['Preceding'].transform(
-        lambda x: x != x.shift(fill_value=-1)
-    )
-    
-    #追従関係にない（Preceding=0）
-    preceding_zero = df['Preceding'] == 0
-    
-    # 条件が途切れるタイミング
-    break_point = lane_changed | preceding_changed | preceding_zero
-    
+
+    # 追従が途切れるタイミングを検出（直前の行と比較して変化したら旗を立てる）
+    vehicle_changed      = df['Vehicle_ID']  != df['Vehicle_ID'].shift()
+    time_period_changed  = df['time_period'] != df['time_period'].shift()
+    lane_changed         = df['Lane_ID']     != df['Lane_ID'].shift()
+    preceding_changed    = df['Preceding']   != df['Preceding'].shift()
+
+    # どれか1つでもTrueなら追従の切れ目
+    break_point = vehicle_changed | time_period_changed | lane_changed | preceding_changed
+
     # ペアIDを付与
     df['pair_id'] = break_point.cumsum()
-    
-    # Preceding=0の行はpair_idをNaNにする
-    df.loc[preceding_zero, 'pair_id'] = None
-    
-    return df
 
+    # Preceding=0の行はpair_idをNaNにする（追従関係がないため）
+    preceding_zero = df['Preceding'] == 0
+    df.loc[preceding_zero, 'pair_id'] = None
+
+    return df
 
 #追従ペアIDを付与する関数
 def give_mode_id(df, original_df):
