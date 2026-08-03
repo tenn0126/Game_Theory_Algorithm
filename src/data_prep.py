@@ -2,6 +2,7 @@ import pandas as pd
 from pathlib import Path
 import numpy as np
 import matplotlib.pyplot as plt
+from scipy.signal import savgol_filter
 
 #軌跡データの読み込み
 def load_trajectory_data():
@@ -538,3 +539,71 @@ def assign_and_count_pair_type_with_pair_id(df):
     print(pairs_summary)
 
     return df_out
+
+
+
+###################################################################
+###################################################################
+#ローパスフィルタ
+###################################################################
+###################################################################
+
+def smooth_speed(df, window_length=11, polyorder=3, speed_col='v_Vel'):
+    """
+    車両(Vehicle_ID, time_period)ごとに独立してSavitzky-Golayフィルタをかけ、
+    速度の高周波ノイズ(NGSIM特有の階段状の疑似定速パターン)を平滑化する。
+
+    window_length: フィルタ窓の長さ(フレーム数, 奇数)。10Hzサンプリングなので
+                    11なら約1.1秒, 21なら約2.1秒の窓になる
+    polyorder: 窓内でフィットする多項式の次数(window_length未満である必要がある)
+    """
+    df = df.sort_values(['time_period', 'Vehicle_ID', 'Global_Time']).copy()
+
+    def _smooth(s):
+        if len(s) < window_length:
+            return s  # 窓より短い軌跡は平滑化しない
+        return pd.Series(
+            savgol_filter(s.values, window_length=window_length, polyorder=polyorder),
+            index=s.index
+        )
+
+    df[f'{speed_col}_smooth'] = df.groupby(['Vehicle_ID', 'time_period'])[speed_col].transform(_smooth)
+
+    return df
+
+def recompute_acceleration(df, speed_col='v_Vel_smooth'):
+    """平滑化した速度の差分から加速度を再計算する(ft/s^2)。"""
+    df = df.sort_values(['time_period', 'Vehicle_ID', 'Global_Time']).copy()
+    g = df.groupby(['Vehicle_ID', 'time_period'])
+    dt = g['Global_Time'].diff() / 1000  # ms -> s
+    dv = g[speed_col].diff()
+    df['v_Acc_recalc'] = dv / dt
+    return df
+
+def smooth_acceleration(df, window_length=11, polyorder=3, acc_col='v_Acc'):
+    """
+    車両(Vehicle_ID, time_period)ごとに独立してSavitzky-Golayフィルタをかけ、
+    加速度(v_Acc)の高周波ノイズ/スパイクを平滑化する。
+    """
+    df = df.sort_values(['time_period', 'Vehicle_ID', 'Global_Time']).copy()
+
+    def _smooth(s):
+        if len(s) < window_length:
+            return s
+        return pd.Series(
+            savgol_filter(s.values, window_length=window_length, polyorder=polyorder),
+            index=s.index
+        )
+
+    df[f'{acc_col}_smooth'] = df.groupby(['Vehicle_ID', 'time_period'])[acc_col].transform(_smooth)
+
+    return df
+
+
+def moving_average_acceleration(df, window=11, acc_col='v_Acc'):
+    """比較用：単純な窓内平均による加速度平滑化。"""
+    df = df.sort_values(['time_period', 'Vehicle_ID', 'Global_Time']).copy()
+    df[f'{acc_col}_ma'] = df.groupby(['Vehicle_ID', 'time_period'])[acc_col].transform(
+        lambda s: s.rolling(window=window, center=True, min_periods=1).mean()
+    )
+    return df
