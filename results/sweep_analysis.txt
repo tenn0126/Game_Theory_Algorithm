@@ -1,0 +1,97 @@
+総パターン数: 720
+final_pairsの分布: min=810, max=1572
+
+=== duration_before_cutoff別 ===
+                        count         mean   min   max
+duration_before_cutoff                                
+False                     360   817.100000   810   829
+True                      360  1565.333333  1560  1572
+
+=== duration_before_cutoff=True の中身 (n=360) ===
+                                               count    mean   min   max
+content_before_duration accel_before_duration                           
+False                   False                    228  1565.0  1565  1565
+                        True                      96  1564.5  1560  1572
+True                    False                     12  1565.0  1565  1565
+                        True                      24  1572.0  1572  1572
+
+=== final_pairs最大値(1572)のパターン一覧 (n=60) ===
+valid -> lane -> accel -> mode -> duration -> cutoff
+lane -> mode -> accel -> duration -> cutoff -> valid
+lane -> mode -> accel -> duration -> valid -> cutoff
+lane -> mode -> accel -> valid -> duration -> cutoff
+valid -> mode -> lane -> accel -> duration -> cutoff
+mode -> valid -> lane -> accel -> duration -> cutoff
+lane -> valid -> mode -> accel -> duration -> cutoff
+accel -> valid -> mode -> duration -> cutoff -> lane
+accel -> valid -> mode -> duration -> lane -> cutoff
+accel -> lane -> mode -> duration -> cutoff -> valid
+accel -> lane -> mode -> duration -> valid -> cutoff
+lane -> accel -> valid -> mode -> duration -> cutoff
+lane -> valid -> accel -> mode -> duration -> cutoff
+accel -> lane -> mode -> valid -> duration -> cutoff
+accel -> lane -> valid -> mode -> duration -> cutoff
+valid -> mode -> accel -> duration -> cutoff -> lane
+valid -> mode -> accel -> duration -> lane -> cutoff
+valid -> mode -> accel -> lane -> duration -> cutoff
+lane -> accel -> mode -> duration -> cutoff -> valid
+lane -> accel -> mode -> duration -> valid -> cutoff
+mode -> lane -> valid -> accel -> duration -> cutoff
+mode -> valid -> accel -> duration -> cutoff -> lane
+mode -> valid -> accel -> duration -> lane -> cutoff
+mode -> valid -> accel -> lane -> duration -> cutoff
+accel -> valid -> mode -> lane -> duration -> cutoff
+accel -> valid -> lane -> mode -> duration -> cutoff
+mode -> lane -> accel -> duration -> cutoff -> valid
+mode -> lane -> accel -> duration -> valid -> cutoff
+mode -> lane -> accel -> valid -> duration -> cutoff
+accel -> mode -> duration -> valid -> cutoff -> lane
+accel -> mode -> duration -> valid -> lane -> cutoff
+accel -> mode -> lane -> duration -> cutoff -> valid
+accel -> mode -> lane -> duration -> valid -> cutoff
+accel -> mode -> lane -> valid -> duration -> cutoff
+accel -> mode -> valid -> duration -> cutoff -> lane
+accel -> mode -> valid -> duration -> lane -> cutoff
+accel -> mode -> valid -> lane -> duration -> cutoff
+lane -> mode -> valid -> accel -> duration -> cutoff
+lane -> accel -> mode -> valid -> duration -> cutoff
+valid -> accel -> mode -> duration -> cutoff -> lane
+valid -> accel -> mode -> duration -> lane -> cutoff
+valid -> accel -> mode -> lane -> duration -> cutoff
+valid -> accel -> lane -> mode -> duration -> cutoff
+mode -> accel -> duration -> lane -> cutoff -> valid
+mode -> accel -> duration -> lane -> valid -> cutoff
+mode -> accel -> duration -> valid -> cutoff -> lane
+mode -> accel -> duration -> valid -> lane -> cutoff
+mode -> accel -> lane -> duration -> cutoff -> valid
+mode -> accel -> lane -> duration -> valid -> cutoff
+mode -> accel -> lane -> valid -> duration -> cutoff
+mode -> accel -> valid -> duration -> cutoff -> lane
+mode -> accel -> valid -> duration -> lane -> cutoff
+mode -> accel -> valid -> lane -> duration -> cutoff
+mode -> accel -> duration -> cutoff -> lane -> valid
+mode -> accel -> duration -> cutoff -> valid -> lane
+accel -> mode -> duration -> cutoff -> lane -> valid
+accel -> mode -> duration -> cutoff -> valid -> lane
+accel -> mode -> duration -> lane -> cutoff -> valid
+accel -> mode -> duration -> lane -> valid -> cutoff
+valid -> lane -> mode -> accel -> duration -> cutoff
+
+validの位置分布(最大値グループ内, 0-indexed): {0: 10, 5: 10, 4: 10, 3: 10, 1: 10, 2: 10}
+laneの位置分布(最大値グループ内, 0-indexed): {1: 10, 0: 10, 2: 10, 5: 10, 4: 10, 3: 10}
+modeの位置分布(最大値グループ内, 0-indexed): {1: 20, 0: 20, 2: 14, 3: 6}
+durationの位置分布(最大値グループ内, 0-indexed): {4: 24, 3: 24, 2: 12}
+cutoffの位置分布(最大値グループ内, 0-indexed): {5: 40, 4: 16, 3: 4}
+accelの位置分布(最大値グループ内, 0-indexed): {0: 20, 1: 20, 2: 14, 3: 6}
+
+=== final_pairs最小値(810)のパターン一覧 (n=96) ===
+valid -> mode -> lane -> cutoff -> duration -> accel
+valid -> mode -> cutoff -> duration -> accel -> lane
+valid -> mode -> cutoff -> duration -> lane -> accel
+cutoff -> mode -> duration -> accel -> lane -> valid
+cutoff -> mode -> duration -> accel -> valid -> lane
+valid -> mode -> cutoff -> lane -> duration -> accel
+cutoff -> lane -> valid -> duration -> mode -> accel
+cutoff -> lane -> valid -> mode -> duration -> accel
+cutoff -> valid -> duration -> accel -> mode -> lane
+cutoff -> valid -> duration -> accel -> lane -> mode
