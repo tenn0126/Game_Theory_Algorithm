@@ -250,8 +250,9 @@ def fit_nominal_speed_logistic(df, mode_id, density_col='mdensity_veh_km', speed
     # 対象の追従タイプ(mode_id)に絞り、欠損を除く
     data = df[df['mode_id'] == mode_id].dropna(subset=[density_col, speed_col]).copy()
     if len(data) == 0:
-        raise ValueError(f"mode_id={mode_id} に該当するデータがありません。")
-
+        print(f"mode_id={mode_id} に該当するデータがありません。")
+        return None
+    
     #速度をft/s -> km/hに変換(密度は既にveh/km前提 compute_micro_densityで計算済み)　
     data['speed_kmh'] = data[speed_col] * 0.3048 * 3.6
 
@@ -276,9 +277,12 @@ def fit_nominal_speed_logistic(df, mode_id, density_col='mdensity_veh_km', speed
     if lower_bounds is None:
         lower_bounds = [0.0, 20.0, 5.0, 0.5, 0.05]     # [ub, uf, rhoc, theta1, theta2]
     if upper_bounds is None:
-        upper_bounds = [60.0, 130.0, 150.0, 30.0, 3.0]
+        upper_bounds = [60.0, 130.0, 150.0, 100.0, 100.0]
     if init_params is None:
         init_params = [15.0, 80.0, 30.0, 10.0, 1.0]
+
+    # Boundsの範囲外エラー(invalid_argument)防止用クランプ
+    init_params = np.clip(init_params, lower_bounds, upper_bounds).tolist()
 
     #ISRES(GN_ISRES)で最適化
     #GN_ISRES,GN_DIRECT,LN_COBYLA,LD_MMA　等別手法
@@ -348,7 +352,8 @@ def fit_nominal_density_logistic(
     )
 
     if len(data) == 0:
-        raise ValueError(f'mode_id={mode_id} に該当するデータがありません。')
+        print(f"mode_id={mode_id} に該当するデータがありません。")
+        return None
 
     # 速度を ft/s -> km/h に変換
     data['speed_kmh'] = data[speed_col] * 0.3048 * 3.6
@@ -689,6 +694,7 @@ def plot_model_logistic_3params(
     plt.grid(alpha=0.3)
     plt.legend()
     plt.show()
+
 def plot_model_logistic_scaling(
     df,
     mode_id,
@@ -895,7 +901,7 @@ def fit_nominal_speed_underwood(df, mode_id, density_col='mdensity_veh_km', spee
     data = df[df['mode_id'] == mode_id].dropna(subset=[density_col, speed_col]).copy()
     if len(data) == 0:
         print(f"mode_id={mode_id} に該当するデータがありません。")
-        return 0
+        return None
 
     #速度をft/s -> km/hに変換(密度は既にveh/km前提)
     data['speed_kmh'] = data[speed_col] * 0.3048 * 3.6
@@ -951,7 +957,7 @@ def plot_model_underwood(
     mode_id,
     params,
     params2,
-    params3,
+    #params3,
     mode_name,
     label1='Estimated Model',
     label2='Estimated Model in paper',
@@ -1021,7 +1027,7 @@ def plot_model_underwood(
     # 各モデル曲線（引数で受け取った label1, label2, label3 を適用）
     plt.plot(
         rho_range,
-        v_pred2,
+        v_pred,
         color='red',
         linewidth=2,
         label=label1,
@@ -1036,7 +1042,7 @@ def plot_model_underwood(
     # )
     plt.plot(
         rho_range,
-        v_pred,
+        v_pred2,
         color='orange',
         linewidth=2,
         linestyle='--',
@@ -1155,14 +1161,7 @@ def plot_model_underwood_3params(
         linewidth=2,
         label=label1,
     )
-    plt.plot(
-        rho_range,
-        v_pred3,
-        color='green',
-        linewidth=2,
-        linestyle='-.',
-        label=label3,
-    )
+
     plt.plot(
         rho_range,
         v_pred2,
@@ -1170,6 +1169,15 @@ def plot_model_underwood_3params(
         linewidth=2,
         linestyle='--',
         label=label2,
+    )
+
+    plt.plot(
+        rho_range,
+        v_pred3,
+        color='green',
+        linewidth=2,
+        linestyle='-.',
+        label=label3,
     )
 
     # 中央値プロット
@@ -1637,7 +1645,7 @@ def plot_macroscopic_speed_density(
     Parameters:
     -----------
     df_macro : pd.DataFrame
-        compute_macroscopic_snapshots の返り値 (density_veh_km, speed_kmh,
+        compute_macroscopic_data の返り値 (density_veh_km, speed_kmh,
         v_Class を含む)
     bin_width : float
         密度をグループ化するビン幅 (veh/km/lane)
