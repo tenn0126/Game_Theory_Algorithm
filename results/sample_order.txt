@@ -1,0 +1,1 @@
+'valid ↁEmode ↁElane ↁEcutoff ↁEduration ↁEaccel'
