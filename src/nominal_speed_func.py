@@ -152,74 +152,6 @@ def compute_micro_density(df, ft_to_m=0.3048):
 
 
 ################################################################
-#マクロ挙動の計算
-################################################################
-#　スナップショットからの密度、平均速度を計算する。
-# 密度は車種ごとに計算。
-#　スナップショットからの密度、平均速度を計算する。
-# 密度は"車種ごと"に計算。
-
-def compute_macroscopic_data(df, lanes=(2, 3, 4), classes=(2, 3), snapshot_step_frames=5,
-                                    L_m=None, n_lanes=None, frame_interval_ms=100):
-    """
-    一定間隔(デフォルト5フレーム=0.5秒)でスナップショットを取り、
-    マクロ密度(veh/km/lane)・平均速度(km/h)・流率(veh/h/lane)を計算する。
-
-    df: trajectoryデータ(関数内でlanes/classesに絞る前のデータでも可)
-    lanes: 対象車線
-    classes: 対象車種(2=car, 3=truck)
-    snapshot_step_frames: 何フレームおきにスナップショットを取るか(デフォルトは5フレーム(論文値))
-    L_m: 実際のデータのy座標の範囲から自動計算する 
-    n_lanes: 車線数(デフォルトは3)
-    """
-    #snaphshot間隔を時間に直す
-    step_ms = frame_interval_ms * snapshot_step_frames  # 500ms
-
-    # time_periodごとに、スナップショットを撮る時刻の集合を作成 
-    valid_times = set()
-    #time_periodごとにグループ分けし１ブロックずつループ処理
-    for tp, group in df.groupby('time_period'):
-        # 観測時間の最小値(t_min)・最大値(t_max)を取得
-        t_min = int(group['Global_Time'].min())
-        t_max = int(group['Global_Time'].max())
-        
-        # t_min始まりの0.5秒(500ms)ごとの時刻配列を作成し、集合に追加
-        snapshot_times_tp = set(range(t_min, t_max + 1, step_ms))
-        #上で作った集合に追加し、全時間区間のスナップショットを撮る時間リストを作成（globaltimeは重複しないためデータの重複もないはず）
-        valid_times.update(snapshot_times_tp)
-
-    # データを車線と車種で絞り込む
-    target = df[df['Lane_ID'].isin(lanes) & df['v_Class'].isin(classes)].copy()
-
-    #車線の長さ・車線数
-    #L_mが引数で与えられなかった場合、ｙ座標の最大値と最小値の差から計算
-    if L_m is None:
-        L_m = (target['Local_Y'].max() - target['Local_Y'].min()) * FT_TO_M
-        
-    #n_lanesが引数で与えられなかった場合、laneの数を計算
-    if n_lanes is None:
-        n_lanes = len(lanes)
-
-    L_km = L_m / 1000
-
-    print(f"区間長: {L_m:.1f} m, 車線数: {n_lanes}")
-
-    # gloobaltimeが以前作ったスナップショットを撮る時間リストに入っている行を抽出
-    snap_rows = target[target['Global_Time'].isin(valid_times)]
-
-    #抽出したスナップショットを撮るデータを時間と車種でグループ化し、グループごとに集計処理
-    agg = snap_rows.groupby(['time_period', 'Global_Time', 'v_Class']).agg(
-        n_vehicles=('Vehicle_ID', 'size'),#車種ごとの車両数　Vehicle_ID 列のデータ行数（size）を数えて、n_vehicles（車両数）という列名で保存
-        speed_kmh=('v_Vel', lambda s: (s * FT_TO_M * 3.6).mean())
-        #平均速度　feet/s -> m/s -> km/h　v_Vel 列を単位換算して平均値（mean）を計算し、speed_kmh（平均速度）という列名で保存　
-    ).reset_index()
-
-    agg['density_veh_km'] = agg['n_vehicles'] / (L_km * n_lanes)#マクロ密度の計算　面積で車両数を割る
-    agg['flow_veh_h'] = agg['density_veh_km'] * agg['speed_kmh']#流量の計算　
-    print("\n--マクロ密度・平均速度を計算--")
-
-    return agg
-################################################################
 #ロジスティックモデルでのパラメータ推定 (speed target)
 ################################################################
 def logistic_speed_density(rho, ub, uf, rhoc, theta1, theta2):
@@ -948,7 +880,97 @@ def fit_nominal_speed_underwood(df, mode_id, density_col='mdensity_veh_km', spee
     print(f"テストMAE: {test_mae:.3f} km/h")
 
     return {'mode_id': mode_id, 'uf': uf, 'rhoc': rhoc, 'test_mae': test_mae}
+################################################################
+#Underwoodモデルの逆関数（速度から密度を予測）
+################################################################
+#Underwoodモデルを逆関数にして、速度から密度を予測する関数を定義
+def underwood_density_speed(v, uf, rhoc):
+    """
+    逆関数: 速度 v から 密度 rho を予測
+    g(rho) = uf * exp(-rho/rhoc) を rho について解くと、
+    rho = rhoc * ln(uf / v)
+    """
+    # 数学的に定義できない領域（v <= 0 または v >= uf）に対する数値的クリップ
+    eps = 1e-6
+    v_clipped = np.clip(v, eps, uf - eps)
 
+    return rhoc * np.log(uf / v_clipped)
+
+
+def fit_nominal_density_underwood(df, mode_id, density_col='mdensity_veh_km', speed_col='v_Vel',
+                                    lower_bounds=None, upper_bounds=None, init_params=None,
+                                    max_eval=15000, test_size=0.3, random_state=42):
+    """
+    指定した追従タイプ(mode_id)のデータから、
+    速度を入力として密度を予測し、密度の誤差(L1 Loss)を最小化する形で
+    アンダーウッドモデルのパラメータ(uf, rhoc)をISRESで推定する。トラッククラス用。
+
+    パラメータの並び順: [uf, rhoc]
+    - uf: 自由流速度(km/h)      - rhoc: 臨界密度(veh/km)
+
+    lower_bounds/upper_bounds/init_paramsを渡せば探索範囲・初期値を制約できる。
+    """
+
+    # 対象の追従タイプ(mode_id)に絞り、欠損を除く
+    data = df[df['mode_id'] == mode_id].dropna(subset=[density_col, speed_col]).copy()
+    if len(data) == 0:
+        print(f"mode_id={mode_id} に該当するデータがありません。")
+        return None
+
+    #速度をft/s -> km/hに変換(密度は既にveh/km前提)
+    data['speed_kmh'] = data[speed_col] * 0.3048 * 3.6
+
+    X = data['speed_kmh'].values      # 入力: 速度(km/h)
+    Y = data[density_col].values      # ターゲット: 密度(veh/km)
+
+    #70:30で学習・評価データに分割(論文と同じ比率)
+    X_train, X_test, Y_train, Y_test = train_test_split(
+        X, Y, test_size=test_size, random_state=random_state
+    )
+
+    #目的関数：密度のL1誤差の合計
+    def objective(x, grad):
+        uf, rhoc = x
+        pred_rho = underwood_density_speed(X_train, uf, rhoc)
+        return np.sum(np.abs(Y_train - pred_rho))#実測値と推測値の差の絶対値の総和
+
+    #探索範囲・初期値のデフォルト(指定があれば上書き)
+    #論文の値(km換算): T-T → uf≈68.5, rhoc≈25.9 / T-C → uf≈96.7, rhoc≈49.4
+    if lower_bounds is None:
+        lower_bounds = [20.0, 5.0]        # [uf, rhoc]
+    if upper_bounds is None:
+        upper_bounds = [150.0, 100.0]
+    if init_params is None:
+        init_params = [80.0, 40.0]
+
+    # Boundsの範囲外エラー(invalid_argument)防止用クランプ
+    init_params = np.clip(init_params, lower_bounds, upper_bounds).tolist()
+
+    #ISRES(GN_ISRES)で最適化
+    opt = nlopt.opt(nlopt.GN_ISRES, 2)
+    opt.set_lower_bounds(lower_bounds)
+    opt.set_upper_bounds(upper_bounds)
+    opt.set_min_objective(objective)
+    opt.set_maxeval(max_eval)
+    best_params = opt.optimize(init_params)
+
+    #テストデータで密度のMAEを評価
+    uf, rhoc = best_params
+    Y_pred_test = underwood_density_speed(X_test, uf, rhoc)
+    test_mae_density = mean_absolute_error(Y_test, Y_pred_test)
+
+    #（参考）予測した密度から算出した速度でのMAEも計算
+    v_pred_test = underwood_speed_density(Y_test, uf, rhoc)
+    test_mae_speed = mean_absolute_error(X_test, v_pred_test)
+
+    print(f"\n--mode_id={mode_id}の名目速度関数paramを推定(density target)--")
+    print(f"--- mode_id={mode_id} 密度ターゲットでの推定結果(アンダーウッド) ---")
+    print(f"uf={uf:.3f} km/h, rhoc={rhoc:.3f} veh/km")
+    print(f"テスト密度MAE: {test_mae_density:.3f} veh/km")
+    print(f"テスト速度MAE: {test_mae_speed:.3f} km/h")
+
+    return {'mode_id': mode_id, 'uf': uf, 'rhoc': rhoc,
+            'test_mae_density': test_mae_density, 'test_mae_speed': test_mae_speed}
 ################################################################
 #ミクロ速度密度散布図と推定モデルの関数プロット Underwoodモデル用
 #################################################################
