@@ -75,6 +75,8 @@ def remove_flicker_noise(df, col='Preceding', threshold=5):
     replacement = blocks['prev_value'].where(is_flicker)
     #ノイズ判定された行はprevの値(replacementに入っている)で埋められる　 mapした結果nanの行は元の値で埋める
     df[col] = df['_block_id'].map(replacement).fillna(df[col])
+    # 補正した行に印を付ける（後で車間距離を座標から計算し直すため）
+    df[f'_flicker_{col}'] = df['_block_id'].map(is_flicker).fillna(False).astype(bool)
     #block_idは不要なので消す   
     df = df.drop(columns='_block_id')
 
@@ -82,6 +84,50 @@ def remove_flicker_noise(df, col='Preceding', threshold=5):
     print(f"補正されたブロック数: {is_flicker.sum():,}")
     print(f"行数: {len(df):,}")
 
+    return df
+
+def recompute_headway_after_flicker(df, flag_cols=('_flicker_Preceding', '_flicker_Lane_ID')):
+    """
+    フリッカリング補正した行の Space_Headway / Time_Headway を、補正後の先行車(Preceding)の
+    座標から計算し直す。
+      Space_Headway = 先行車の Local_Y − 自車の Local_Y   (ft, どちらも前端中心 → NGSIMと同じ定義)
+      Time_Headway  = Space_Headway / 自車速度 v_Vel      (s, 停止中はNGSIMと同じ 9999.99)
+    次の行は計算できないので NaN にする（後段の filter_invalid_headway で除外される）:
+      Preceding=0 / 先行車がその時刻に存在しない / 距離が0以下 / 先行車が別の車線にいる
+    """
+    df = df.copy()
+    flag_cols = [c for c in flag_cols if c in df.columns]
+    flag = df[flag_cols].any(axis=1)
+
+    # 各時刻の全車両の位置と車線（先行車として突き合わせる）
+    lead = df[['time_period', 'Global_Time', 'Vehicle_ID', 'Local_Y', 'Lane_ID']].rename(
+        columns={'Vehicle_ID': 'Preceding', 'Local_Y': 'Local_Y_lead', 'Lane_ID': 'Lane_ID_lead'})
+    tgt = df.loc[flag, ['time_period', 'Global_Time', 'Preceding', 'Local_Y', 'v_Vel', 'Lane_ID']]
+    m = (tgt.reset_index()
+            .merge(lead, on=['time_period', 'Global_Time', 'Preceding'], how='left')
+            .set_index('index')
+            .loc[tgt.index])
+
+    new_space = m['Local_Y_lead'] - m['Local_Y']
+    same_lane = m['Lane_ID_lead'] == m['Lane_ID']
+    base_ok = (m['Preceding'] != 0) & new_space.notna() & (new_space > 0)
+    ok = base_ok & same_lane
+
+    new_space = new_space.where(ok)
+    new_time = pd.Series(np.where(m['v_Vel'] > 0, new_space / m['v_Vel'], 9999.99),
+                         index=m.index).where(ok)
+
+    old_space = df.loc[flag, 'Space_Headway']
+    df.loc[flag, 'Space_Headway'] = new_space
+    df.loc[flag, 'Time_Headway'] = new_time
+
+    changed = ok & ((new_space - old_space).abs() > 1.0)
+    print("\n--フリッカリング補正行の車間距離を座標から再計算--")
+    print(f"対象行: {int(flag.sum()):,}  再計算できた行: {int(ok.sum()):,}  NaNにした行: {int((~ok).sum()):,}")
+    print(f"  NaNの内訳: 先行車が別車線 {int((base_ok & ~same_lane).sum()):,}行 / "
+          f"先行車なし・位置不明・距離0以下 {int((~base_ok).sum()):,}行")
+    print(f"  元の値から1ft超変わった行: {int(changed.sum()):,}  (元の値が0だった行: {int((old_space == 0).sum()):,})")
+    
     return df
 
 def give_pair_id(df, max_gap_frames=10, frame_interval_ms=100):

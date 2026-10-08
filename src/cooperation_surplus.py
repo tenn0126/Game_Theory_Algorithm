@@ -90,7 +90,7 @@ def compute_1pipe_speed_for_snapshots(df_macro, car_params, truck_params, a2, b1
     pivot = df_macro.pivot_table(
         index=['time_period', 'Global_Time'],#timeperiodとGlobal_Timeが同じなら同じ行にまとめる
         columns='v_Class',#クラスを新たな列名にする
-        values=['density_veh_km', 'speed_kmh']#その時の密度を入れる
+        values=['density_veh_km', 'speed_kmh', 'speed_std_kmh', 'n_vehicles']#その時の密度を入れる
     )
 
     #2段の列名を1段のわかりやすい名前に変換
@@ -99,11 +99,17 @@ def compute_1pipe_speed_for_snapshots(df_macro, car_params, truck_params, a2, b1
         ('density_veh_km', truck_class): 'rho2',
         ('speed_kmh', car_class): 'u1_obs',    #車の観測平均速度 ũ1
         ('speed_kmh', truck_class): 'u2_obs',  #トラックの観測平均速度 ũ2
+        ('speed_std_kmh', car_class): 'u1_std',
+        ('speed_std_kmh', truck_class): 'u2_std',
+        ('n_vehicles', car_class): 'n1',
+        ('n_vehicles', truck_class): 'n2'
     }
     pivot.columns = [col_map[c] for c in pivot.columns]
 
-    #密度は「いない=0」でよいが、速度は「いない=定義できない」のでNaNのまま残す
-    pivot[['rho1', 'rho2']] = pivot[['rho1', 'rho2']].fillna(0.0)
+    # #密度は「いない=0」でよいが、速度は「いない=定義できない」のでNaNのまま残す
+    # pivot[['rho1', 'rho2']] = pivot[['rho1', 'rho2']].fillna(0.0)
+    #密度と台数は「いない=0」、速度と標準偏差は「定義できない」のでNaNのまま
+    pivot[['rho1', 'rho2', 'n1', 'n2']] = pivot[['rho1', 'rho2', 'n1', 'n2']].fillna(0.0)
     pivot = pivot.reset_index()
 
     #1行ずつ1-pipe速度を計算する関数

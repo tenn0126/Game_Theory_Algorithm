@@ -25,31 +25,46 @@ FT_TO_M = 0.3048
 def compute_macroscopic_data(df, lanes=(2, 3, 4), classes=(2, 3), snapshot_step_frames=5,
                                     L_m=None, n_lanes=None, frame_interval_ms=100):
     """
-    一定間隔(デフォルト5フレーム=0.5秒)でスナップショットを取り、
-    マクロ密度(veh/km/lane)・平均速度(km/h)・流率(veh/h/lane)を計算する。
+    一定間隔(デフォルト5フレーム=0.5秒)でスナップショットを取り、車種ごとに
+    マクロ密度(veh/km/lane)・平均速度(km/h)・速度の標準偏差(km/h)・流率(veh/h/lane)を計算する。
+
+    スナップショット時刻は全time_period共通で「Global_Timeが500msの倍数」とする。
+    (period2と3はGlobal_Timeが約180秒重なっているが、全期間で同じ時刻を使うため
+     刻みがずれて余分なスナップショットが混ざることはない。重なり区間そのものは
+     両期間に残るので、先頭・末尾の除外で別途処理する)
 
     df: trajectoryデータ(関数内でlanes/classesに絞る前のデータでも可)
     lanes: 対象車線
     classes: 対象車種(2=car, 3=truck)
-    snapshot_step_frames: 何フレームおきにスナップショットを取るか(デフォルトは5フレーム(論文値))
-    L_m: 実際のデータのy座標の範囲から自動計算する 
-    n_lanes: 車線数(デフォルトは3)
+    snapshot_step_frames: 何フレームおきにスナップショットを取るか(論文: 0.5秒)
+    L_m: 区間長(m)。Noneなら対象データのLocal_Yの範囲から自動計算
+    n_lanes: 車線数。Noneならlanesの数
+
+    戻り値の列:
+      time_period, Global_Time, v_Class,
+      n_vehicles     : スナップショット内の台数
+      speed_kmh      : 平均速度(論文Eq.10)
+      speed_std_kmh  : 速度の標準偏差(不偏, ddof=1)。1台だけの時刻はNaN
+      density_veh_km : マクロ密度(論文Eq.9)
+      flow_veh_h     : 流率
     """
     #snaphshot間隔を時間に直す
     step_ms = frame_interval_ms * snapshot_step_frames  # 500ms
 
     # time_periodごとに、スナップショットを撮る時刻の集合を作成 
-    valid_times = set()
-    #time_periodごとにグループ分けし１ブロックずつループ処理
-    for tp, group in df.groupby('time_period'):
-        # 観測時間の最小値(t_min)・最大値(t_max)を取得
-        t_min = int(group['Global_Time'].min())
-        t_max = int(group['Global_Time'].max())
+    #valid_times = set()
+
+    #スナップショットを撮る配列作成は使用しないように変更(26/10/03)
+    # #time_periodごとにグループ分けし１ブロックずつループ処理
+    # for tp, group in df.groupby('time_period'):
+    #     # 観測時間の最小値(t_min)・最大値(t_max)を取得
+    #     t_min = int(group['Global_Time'].min())
+    #     t_max = int(group['Global_Time'].max())
         
-        # t_min始まりの0.5秒(500ms)ごとの時刻配列を作成し、集合に追加
-        snapshot_times_tp = set(range(t_min, t_max + 1, step_ms))
-        #上で作った集合に追加し、全時間区間のスナップショットを撮る時間リストを作成（globaltimeは重複しないためデータの重複もないはず）
-        valid_times.update(snapshot_times_tp)
+    #     # t_min始まりの0.5秒(500ms)ごとの時刻配列を作成し、集合に追加
+    #     snapshot_times_tp = set(range(t_min, t_max + 1, step_ms))
+    #     #上で作った集合に追加し、全時間区間のスナップショットを撮る時間リストを作成（globaltimeは重複しないためデータの重複もないはず）
+    #     valid_times.update(snapshot_times_tp)
 
     # データを車線と車種で絞り込む
     target = df[df['Lane_ID'].isin(lanes) & df['v_Class'].isin(classes)].copy()
@@ -67,14 +82,20 @@ def compute_macroscopic_data(df, lanes=(2, 3, 4), classes=(2, 3), snapshot_step_
 
     print(f"区間長: {L_m:.1f} m, 車線数: {n_lanes}")
 
-    # gloobaltimeが以前作ったスナップショットを撮る時間リストに入っている行を抽出
-    snap_rows = target[target['Global_Time'].isin(valid_times)]
+    #スナップショットリストを使わないよう変更(26/10/03)
+    # # gloobaltimeが以前作ったスナップショットを撮る時間リストに入っている行を抽出
+    # snap_rows = target[target['Global_Time'].isin(valid_times)]
 
+    # スナップショット時刻(Global_Timeが500msの倍数)の行だけ抽出
+    snap_rows = target[target['Global_Time'] % step_ms == 0].copy()
+    #速度をkm/hへ変換 (feet/s -> m/s -> km/h)
+    snap_rows['v_kmh'] = snap_rows['v_Vel'] * FT_TO_M * 3.6
+    
     #抽出したスナップショットを撮るデータを時間と車種でグループ化し、グループごとに集計処理
     agg = snap_rows.groupby(['time_period', 'Global_Time', 'v_Class']).agg(
         n_vehicles=('Vehicle_ID', 'size'),#車種ごとの車両数　Vehicle_ID 列のデータ行数（size）を数えて、n_vehicles（車両数）という列名で保存
-        speed_kmh=('v_Vel', lambda s: (s * FT_TO_M * 3.6).mean())
-        #平均速度　feet/s -> m/s -> km/h　v_Vel 列を単位換算して平均値（mean）を計算し、speed_kmh（平均速度）という列名で保存　
+        speed_kmh=('v_kmh', 'mean'),#平均速度　feet/s -> m/s -> km/h　v_Vel 列を単位換算は先に計算されている。平均値（mean）を計算し、speed_kmh（平均速度）という列名で保存　
+        speed_std_kmh=('v_kmh', 'std'),   # ddof=1。1台だけの時刻はNaN　標準偏差を計算
     ).reset_index()
 
     agg['density_veh_km'] = agg['n_vehicles'] / (L_km * n_lanes)#マクロ密度の計算　面積で車両数を割る
