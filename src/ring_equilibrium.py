@@ -363,13 +363,13 @@ def separated_speeds(nominal, rho1, rho2, p2):
     p1=1-p2
     """
     if rho1 > 0:
-        rho1_lane = rho1 / (1 - p2)
+        rho1_lane = rho1 / (1 - p2)#使える道路シェアで密度を補正
         u1 = float(u_nominal(nominal, CAR, CAR, rho1_lane))
     else:
         u1 = np.nan
 
     if rho2 > 0:
-        rho2_lane = rho2 / p2
+        rho2_lane = rho2 / p2#使える道路シェアで密度を補正
         u2 = float(u_nominal(nominal, TRUCK, TRUCK, rho2_lane))
     else:
         u2 = np.nan
